@@ -1,0 +1,434 @@
+import java.applet.*;
+import java.awt.*;
+import java.util.*;
+import hsa.Console;
+public class Minesweeper extends Applet implements Runnable {
+
+ 
+
+int edge = 16;                        
+int width = 16;                        
+int height = 16;                    
+int mines = 40;                       // number of mines 
+int scoreHeight = 48;                 
+  
+
+ 
+ int[] adjacent = null;                // count of adjacent mines 
+ static final int mine = 9;          
+  
+
+ int[] exposed = null;                 
+  static final int listEnd = -1;        
+  static final int incorrect = -2;     
+  static final int exploded = -3;      
+  static final int unexposed = -4;       
+  static final int flagged = -5;       
+  static final int queried = -6;      
+
+  int flags = 0;                        // count of flags set 
+  int remaining = 0;                    // count of unexposed squares 
+            
+  
+Color[] colors = null;                
+Color baseColor;                      
+Color baseShadow;                     
+Color mineColor;                      
+Color numberColor;                    
+Color dangerousColor;                 
+Image[] exposedRect = null;
+Image incorrectRect = null;
+Image explodedRect = null;
+Image unexposedRect = null;
+ Image flaggedRect = null;
+Image queriedRect = null;
+
+  Font theMainFont;
+  Font theScoreFont;
+  int numberSize;                       
+  final static int numberMargin = 2;
+
+  
+  long startTime = 0;                   // time of first click 
+  int elapsed = 0;                      // elapsed time
+  
+  
+  
+  // Game play
+  
+  
+private void add1(int x, int y) {
+ if (x<0 || x>=width || y<0 || y>=height) return;
+    int t = y*width+x;
+    if (adjacent[t] != mine) adjacent[t]++;
+  }
+  
+  private synchronized void erase() {
+   
+    if (adjacent == null) adjacent = new int[width*height];
+    if (exposed == null) exposed = new int[width*height];
+    for (int i = 0; i < width*height; i++) {
+      adjacent[i] = 0;
+      exposed[i] = unexposed;
+};
+    int laid = 0;
+    while (laid < mines) {
+    int target = (short)Math.floor(Math.random()*height*width);
+    if (target>=0 && target < height*width && adjacent[target] != mine) {
+         adjacent[target] = mine;
+      int tx = target%width;
+      int ty = target/width;
+        add1(tx-1, ty-1);
+        add1(tx-1, ty);
+        add1(tx-1, ty+1);
+        add1(tx, ty-1);
+        add1(tx, ty+1);
+        add1(tx+1, ty-1);
+        add1(tx+1, ty);
+        add1(tx+1, ty+1);
+        laid++;
+  };
+  }
+   flags = 0;
+    remaining = width*height;
+   startTime = 0;
+   elapsed = -1;
+    
+     repaint();
+  }
+  
+ int tail = listEnd;                         
+  
+ private void expose1(Graphics g, int x, int y) {
+  
+    if (x<0 || x>=width || y<0 || y>=height) return;
+    int e = y*width+x;
+    if (exposed[e] <= unexposed && exposed[e] != flagged) {
+      remaining--;
+      exposed[e] = listEnd;
+      exposed[tail] = e;
+      tail = e;
+      paintSquare(g, x, y);
+    }
+  }
+  
+  private void expose(int x, int y) {
+   
+    int thisSquare = y*width+x;
+    if (thisSquare<0 || thisSquare >= width*height) return;
+    if (exposed[thisSquare] > unexposed) return;
+    Graphics g = getGraphics();
+    if (adjacent[thisSquare] == mine) {
+      // End of game
+      remaining--;
+      exposed[thisSquare] = exploded;
+      paintSquare(g, x, y);
+      for (int y2 = 0; y2<height; y2++) {
+        for (int x2 = 0; x2<width; x2++) {
+          int i = y2*width+x2;
+          if (i==thisSquare) {
+          } else if (adjacent[i] == mine && exposed[i] != flagged) {
+            remaining--;
+            exposed[i] = listEnd;
+            paintSquare(g, x2, y2);
+          } else if (adjacent[i] != mine && exposed[i] == flagged) {
+            remaining--;
+            exposed[i] = incorrect;
+            paintSquare(g, x2, y2);
+      }
+      }
+      }
+startTime = 0; // turns off the timer
+     
+      
+    } else {
+      
+      remaining--;
+      exposed[thisSquare] = listEnd;
+      tail = thisSquare;
+      paintSquare(g, x, y);
+      int pending = thisSquare;
+     
+      while (pending != listEnd) {
+      if (adjacent[pending]==0) {
+          int px = pending%width;
+          int py = pending/width;
+          expose1(g, px-1, py-1);
+          expose1(g, px-1, py);
+          expose1(g, px-1, py+1);
+          expose1(g, px, py-1);
+          expose1(g, px, py+1);
+          expose1(g, px+1, py-1);
+          expose1(g, px+1, py);
+          expose1(g, px+1, py+1);
+     }
+        pending = exposed[pending];
+     }
+      if (remaining==mines) {
+        // End of game show rest of teh mines 
+       
+         for (int y2 = 0; y2<height; y2++) {
+         for (int x2 = 0; x2<width; x2++) {
+         int i = y2*width+x2;
+         if (adjacent[i] == mine && exposed[i] <= unexposed &&
+        exposed[i] != flagged ) {
+           exposed[i] = flagged;
+           flags++;
+          paintSquare(g, x2, y2);
+        }
+        }
+        }
+        paintFlags(g);
+        startTime=0;
+       
+       
+  }
+  }
+  }
+  
+
+
+  // init method is different from main main is used usually for a program start
+  // and init is used for applet start.
+  
+  
+  public void init() {
+  try {
+  String wStr = getParameter("COLUMNS");
+  String hStr = getParameter("ROWS");
+      String pStr = getParameter("PIXELS");
+      String mStr = getParameter("MINES");
+      if (wStr != null) width = Integer.parseInt(wStr);
+      if (hStr != null) height = Integer.parseInt(hStr);
+      if (pStr != null) edge = Integer.parseInt(pStr);
+      if (mStr != null) mines = Integer.parseInt(mStr);
+    } catch (NumberFormatException e) {
+    }
+    scoreHeight = edge*3;
+   
+    erase();
+  }
+  
+  Thread daemon = null;
+  
+  public synchronized void start() {
+    daemon = new Thread(this);
+    daemon.start();
+  }
+
+  public synchronized void stop() {
+    daemon = null;
+  }
+
+  public void destroy() {
+  }
+
+  public void run() {
+    while (true) {
+    synchronized(this) {
+     if (daemon != Thread.currentThread()) return;
+     if (startTime != 0) {
+     long now = System.currentTimeMillis();
+     int oldElapsed = elapsed;
+     elapsed = Math.round((0.0f+(now-startTime))/1000);
+      if (elapsed != oldElapsed) paintTime(getGraphics());
+      }
+      }
+  try { Thread.sleep(100); } catch (InterruptedException e) { };
+  }
+  }
+
+
+ 
+  // Painting 
+  //
+  
+  private Image initOneOffscreen(int i) {
+    
+    Image off = createImage(edge, edge);
+    Graphics g = off.getGraphics();
+    g.setColor(i==exploded ? dangerousColor : baseColor);
+    if (i > unexposed) {
+      g.fillRect(0, 0, edge, edge);
+      g.setColor(baseShadow);
+    } else {
+      g.fill3DRect(0, 0, edge-1, edge-1, true);
+      g.setColor(Color.black);
+    };
+    g.drawLine(edge-1, 0, edge-1, edge-1);
+    g.drawLine(0, edge-1, edge-1, edge-1);
+    int halfWidth = edge/2;
+    int quarterPos = (edge-1)/4;
+    if (i==unexposed || i==0 ) {
+    } else if (i==mine || i==exploded) {
+
+g.setColor(mineColor);
+g.drawLine(2, 2, edge-4, edge-4);
+g.drawLine(edge-4, 2, 2, edge-4);
+g.drawLine(halfWidth-1, 1, halfWidth-1, edge-3);
+g.drawLine(1, halfWidth-1, edge-3, halfWidth-1);
+g.fillOval(quarterPos, quarterPos, halfWidth+1, halfWidth+1);
+g.setColor(Color.black);
+g.fillOval(halfWidth-3, halfWidth-3, edge/8, edge/8);
+ } else if (i==incorrect) {
+    
+   g.setColor(dangerousColor);
+   g.drawLine(2, 2, edge-4, edge-4);
+   g.drawLine(2, 3, edge-5, edge-4);
+   g.drawLine(3, 2, edge-4, edge-5);
+   g.drawLine(edge-4, 2, 2, edge-4);
+   g.drawLine(edge-4, 3, 3, edge-4);
+   g.drawLine(edge-5, 2, 2, edge-5);
+    } else if (i==flagged) {
+   
+      g.setColor(dangerousColor);
+      g.fillRect(halfWidth-4, halfWidth-5, halfWidth-4, halfWidth-4);
+      g.setColor(mineColor);
+      g.drawLine(halfWidth, 3, halfWidth, edge-4);
+      g.drawLine(5, edge-4, edge-5, edge-4);
+    } else {
+     
+      FontMetrics fm = this.getFontMetrics(theMainFont);
+      int fontAscent = fm.getAscent();
+      String s = i==queried ? "?" : ""+i;
+      g.setColor(i==queried ? new Color(0,0,255) : colors[i]);
+      g.setFont(theMainFont);
+      g.drawString(s, (edge-fm.stringWidth(s))/2, fontAscent);
+  };
+    return off;
+  }
+  
+ 
+    
+  
+  
+  private void initOffscreen() {
+ baseColor = new Color(205,204,204);
+ baseShadow = new Color(153,153,153);
+ mineColor = new Color(51,51,51);
+  numberColor = new Color(255,102,102);
+ dangerousColor = new Color(255,51,51);
+   
+ colors = new Color[10];
+ colors[0] = Color.black;
+ colors[1] = new Color(51,51,204);        
+ colors[2] = new Color(0,102,0);            
+ colors[3] = new Color(204,0,0);             
+ colors[4] = new Color(102,0,102);           
+ colors[5] = new Color(0,102,102);           
+colors[6] = Color.black;
+colors[7] = Color.black;
+colors[8] = Color.black;
+colors[mine] = Color.black;
+theMainFont = new Font("ComicSans", Font.BOLD, (edge*5)/8+2);
+theScoreFont = new Font("ComicSans", Font.BOLD, (edge*5)/4);
+numberSize = this.getFontMetrics(theScoreFont).stringWidth("000") +
+                 numberMargin*2;
+    explodedRect = initOneOffscreen(exploded);
+    incorrectRect = initOneOffscreen(incorrect);
+    unexposedRect = initOneOffscreen(unexposed);
+    flaggedRect = initOneOffscreen(flagged);
+    queriedRect = initOneOffscreen(queried);
+    exposedRect = new Image[mine+1];
+    for (int i = 0; i<=mine; i++) exposedRect[i] = initOneOffscreen(i);
+    
+  }
+  
+  private void paintNumber(Graphics g, int n, int right) {
+     String s = (n>999 || n<-99 ? "---" : ""+n);
+ if (unexposedRect==null) return;
+ FontMetrics fm = this.getFontMetrics(theScoreFont);
+ int fontAscent = fm.getAscent();
+ int fontHeight = fm.getHeight();
+ int top = (scoreHeight-fontHeight)/2;
+ g.setColor(Color.black);
+ g.fillRect(right-numberSize, top-numberMargin, numberSize, fontHeight+numberMargin*2);
+ g.setColor(numberColor);
+ g.setFont(theScoreFont);
+ g.drawString(s, right-fm.stringWidth(s)-numberMargin, top+fontAscent);
+  }
+  
+  private void paintFlags(Graphics g) {
+    paintNumber(g, mines-flags, numberSize+(width*edge-numberSize*2)/4);
+  }
+  
+  private void paintTime(Graphics g) {
+    paintNumber(g, elapsed<0?0:elapsed,
+                width*edge-(width*edge-numberSize*2)/4);
+  }
+  
+  private void paintSquare(Graphics g, int x, int y) {
+    
+    if (unexposedRect==null) return;
+    int n = y*width+x;
+    int exposure = exposed[n];
+    Image im = exposure==exploded ? explodedRect :
+               exposure==incorrect ? incorrectRect :
+               exposure==unexposed ? unexposedRect :
+               exposure==flagged ? flaggedRect :
+               exposure==queried ? queriedRect :
+               exposedRect[adjacent[n]];
+    g.drawImage(im, x*edge, y*edge+scoreHeight, this);
+  }
+  
+ 
+  
+
+  public synchronized void paint(Graphics g) {
+    if (unexposedRect==null) initOffscreen();
+    g.setColor(baseColor);
+    g.fill3DRect(0, 0, width*edge, scoreHeight, true);
+    paintFlags(g);
+    
+    paintTime(g);
+    for (int y = 0; y<height; y++) {
+    for (int x = 0; x<width; x++) {
+    paintSquare(g, x, y);
+   }
+   }
+   }
+
+  public void update(Graphics g) {
+  paint(g);
+  }
+  
+  
+
+  
+  public synchronized boolean mouseDown(Event evt, int xCoord, int yCoord) {
+    if (yCoord<scoreHeight) {
+    
+     
+      
+      {
+        erase(); //  new game 
+     }
+     } 
+     {
+      // Game over 
+    }  if (xCoord>=0 && xCoord<width*edge) {
+      if (elapsed<0) {
+      startTime = System.currentTimeMillis();
+      elapsed = 0;
+      };
+      int x = xCoord/edge;
+      int y = (yCoord-scoreHeight)/edge;
+      int n = y*width+x;
+      if (evt.shiftDown() || evt.metaDown() ) {
+        if (exposed[n] == unexposed) {
+          exposed[n] = flagged; flags++; paintFlags(getGraphics());
+        } else if (exposed[n] == flagged) {
+          exposed[n] = queried; flags--; paintFlags(getGraphics());
+        } else if (exposed[n] == queried) {
+          exposed[n] = unexposed;
+      }
+      paintSquare(getGraphics(), x, y);
+    } else if (exposed[n] != flagged) {
+      expose(x, y);
+    };
+    };
+    return true;
+  }
+// Place your program here. 'c' is the output console
+}// main method
+ //Minesweepernosmile class
